@@ -1,26 +1,49 @@
-import React from "react";
+import React, { useState } from "react";
+import GraphController from "../controllers/GraphController";
 
-const ControlPanelView = ({ onCreateGraph, onRunMonteCarlo, onRunLasVegas }) => {
-    return (
-        <div style={{
-            width: "250px",
-            padding: "20px",
-            background: "#f4f4f4",
-            borderRight: "2px solid #ccc",
-            height: "100vh"
-        }}>
-            <h2>Panel de Control</h2>
+export default function ControlPanelView() {
+  const [kColors, setKColors] = useState(3);
+  const [algorithm, setAlgorithm] = useState("lasvegas");
 
-            <button onClick={onCreateGraph}>Crear Grafo</button>
-            <br /><br />
+  return (
+    <div>
+      <h2>Panel de Control</h2>
 
-            <button onClick={onRunMonteCarlo}>Ejecutar Monte Carlo</button>
-            <br /><br />
+      <div>
+        <label>Número de colores (k): </label>
+        <input
+          type="number"
+          min="3"
+          value={kColors}
+          onChange={(e) => setKColors(Number(e.target.value))}
+        />
+      </div>
 
-            <button onClick={onRunLasVegas}>Ejecutar Las Vegas</button>
-        </div>
-    );
-};
+      <div style={{ marginTop: "15px" }}>
+        <h3>Algoritmo</h3>
 
-export default ControlPanelView;
+        <select
+          value={algorithm}
+          onChange={(e) => setAlgorithm(e.target.value)}
+        >
+          <option value="lasvegas">Las Vegas</option>
+          <option value="montecarlo">Monte Carlo</option>
+        </select>
+      </div>
 
+      <button
+        style={{ marginTop: "20px", padding: "10px", width: "100%" }}
+        onClick={() => GraphController.addNode()}
+      >
+        Crear nodo
+      </button>
+
+      <button
+        style={{ marginTop: "10px", padding: "10px", width: "100%" }}
+        onClick={() => GraphController.colorGraph(algorithm, kColors)}
+      >
+        Colorear Grafo
+      </button>
+    </div>
+  );
+}

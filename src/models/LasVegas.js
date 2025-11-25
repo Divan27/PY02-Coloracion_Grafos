@@ -1,12 +1,24 @@
-export function runLasVegas(graphs) {
-    // Algoritmo determinista con aleatoriedad controlada
-    graphs.forEach(g => {
-        g.nodes.forEach(n => {
-            if (Math.random() > 0.5) {
-                n.x += 20;
-            }
-        });
-    });
+export default class LasVegas {
+    constructor(graph, k) {
+        this.graph = graph;
+        this.k = k;
+    }
 
-    return graphs;
+    run() {
+        const nodes = this.graph.getNodes();
+        let colors = {};
+        let valid = false;
+
+        while (!valid) {
+            nodes.forEach(id => {
+                colors[id] = Math.floor(Math.random() * this.k);
+            });
+
+            const conflicts = this.graph.findConflicts(colors);
+
+            if (conflicts.length === 0) valid = true;
+        }
+
+        return { colors, valid: true };
+    }
 }

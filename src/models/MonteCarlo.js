@@ -1,11 +1,24 @@
-export function runMonteCarlo(graphs) {
-    // Simulación aleatoria
-    graphs.forEach(g => {
-        g.nodes.forEach(n => {
-            n.x += Math.random() * 10 - 5;
-            n.y += Math.random() * 10 - 5;
-        });
-    });
+export default class LasVegas {
+    constructor(graph, k) {
+        this.graph = graph;
+        this.k = k;
+    }
 
-    return graphs;
+    run() {
+        const nodes = this.graph.getNodes();
+        let colors = {};
+        let valid = false;
+
+        while (!valid) {
+            nodes.forEach(id => {
+                colors[id] = Math.floor(Math.random() * this.k);
+            });
+
+            const conflicts = this.graph.findConflicts(colors);
+
+            if (conflicts.length === 0) valid = true;
+        }
+
+        return { colors, valid: true };
+    }
 }

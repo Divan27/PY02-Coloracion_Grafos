@@ -1,13 +1,55 @@
-import Graph from "../models/Graph";
+class GraphController {
+  constructor() {
+    this.canvas = null;
+    this.ctx = null;
+    this.nodes = [];
+    this.lastNodeId = 0;
+  }
 
-export function createGraph() {
-    const g = new Graph();
+  setCanvas(canvas) {
+    this.canvas = canvas;
+    this.ctx = canvas.getContext("2d");
+    this.draw();
+  }
 
-    // Crear un grafo simple de ejemplo
-    for (let i = 0; i < 5; i++) {
-        g.addNode(Math.random() * 100, Math.random() * 100);
-        if (i > 0) g.addEdge(i - 1, i);
-    }
+  addNode() {
+    const x = 100 + this.nodes.length * 60;
+    const y = 200;
 
-    return g;
+    this.nodes.push({
+      id: this.lastNodeId++,
+      x,
+      y,
+      color: "gray",
+    });
+
+    this.draw();
+  }
+
+  colorGraph() {
+    this.nodes.forEach((n, i) => {
+      const colors = ["red", "green", "blue"];
+      n.color = colors[i % 3];
+    });
+    this.draw();
+  }
+
+  draw() {
+    if (!this.ctx) return;
+
+    const ctx = this.ctx;
+
+    ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+
+    // Dibujar nodos
+    this.nodes.forEach((node) => {
+      ctx.beginPath();
+      ctx.arc(node.x, node.y, 20, 0, Math.PI * 2);
+      ctx.fillStyle = node.color;
+      ctx.fill();
+      ctx.stroke();
+    });
+  }
 }
+
+export default new GraphController();
