@@ -1,55 +1,60 @@
-class GraphController {
+// src/controllers/GraphController.js
+import Graph from "../models/Graph";
+
+export default class GraphController {
   constructor() {
-    this.canvas = null;
-    this.ctx = null;
-    this.nodes = [];
-    this.lastNodeId = 0;
+    this.graph = new Graph();
+    this.listeners = new Set();
   }
 
-  setCanvas(canvas) {
-    this.canvas = canvas;
-    this.ctx = canvas.getContext("2d");
-    this.draw();
+  // Devuelve un snapshot inmutable para React
+  getSnapshot() {
+    return {
+      nodes: [...this.graph.nodes],
+      edges: [...this.graph.edges],
+    };
   }
 
-  addNode() {
-    const x = 100 + this.nodes.length * 60;
-    const y = 200;
+  subscribe(listener) {
+    this.listeners.add(listener);
+    // Enviar estado inicial como snapshot
+    listener(this.getSnapshot());
+    return () => {
+      this.listeners.delete(listener);
+    };
+  }
 
-    this.nodes.push({
-      id: this.lastNodeId++,
-      x,
-      y,
-      color: "gray",
+  notify() {
+    const snapshot = this.getSnapshot();
+    for (const listener of this.listeners) {
+      listener(snapshot);
+    }
+  }
+
+  createManualNode(x, y) {
+    this.graph.addNode(x, y);
+    this.notify();
+  }
+
+  connectNodes(sourceId, targetId) {
+    this.graph.addEdge(sourceId, targetId);
+    this.notify();
+  }
+
+  generateRandomGraph(numNodes) {
+    this.graph = Graph.createRandomConnectedGraph(numNodes, {
+      maxNodes: 120,
     });
-
-    this.draw();
+    this.notify();
   }
 
-  colorGraph() {
-    this.nodes.forEach((n, i) => {
-      const colors = ["red", "green", "blue"];
-      n.color = colors[i % 3];
-    });
-    this.draw();
+  resetGraph() {
+    this.graph.reset();
+    this.notify();
   }
 
-  draw() {
-    if (!this.ctx) return;
-
-    const ctx = this.ctx;
-
-    ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-
-    // Dibujar nodos
-    this.nodes.forEach((node) => {
-      ctx.beginPath();
-      ctx.arc(node.x, node.y, 20, 0, Math.PI * 2);
-      ctx.fillStyle = node.color;
-      ctx.fill();
-      ctx.stroke();
-    });
+  moveNode(nodeId, x, y) {
+    this.graph.updateNodePosition(nodeId, x, y);
+    this.notify();
   }
 }
-
-export default new GraphController();

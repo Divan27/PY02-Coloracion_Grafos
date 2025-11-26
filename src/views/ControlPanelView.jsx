@@ -1,49 +1,118 @@
+// src/views/ControlPanelView.jsx
 import React, { useState } from "react";
-import GraphController from "../controllers/GraphController";
 
-export default function ControlPanelView() {
-  const [kColors, setKColors] = useState(3);
-  const [algorithm, setAlgorithm] = useState("lasvegas");
+export default function ControlPanelView({
+  maxNodes,
+  currentNodes,
+  onAddNode,
+  onGenerateRandomGraph,
+  onReset
+}) {
+  const [randomNodes, setRandomNodes] = useState(10);
+
+  const handleGenerateClick = () => {
+    let num = Number(randomNodes);
+    if (Number.isNaN(num)) {
+      window.alert("Ingrese un número válido de nodos.");
+      return;
+    }
+    if (num < 1) {
+      window.alert("La cantidad mínima de nodos es 1.");
+      return;
+    }
+    if (num > maxNodes) {
+      window.alert(`La cantidad máxima de nodos es ${maxNodes}.`);
+      num = maxNodes;
+    }
+    onGenerateRandomGraph?.(num);
+  };
+
+  const handleAddNodeClick = () => {
+    if (currentNodes >= maxNodes) {
+      window.alert(`No se pueden agregar más de ${maxNodes} nodos.`);
+      return;
+    }
+    onAddNode?.();  // ← aquí se agrega el nodo
+  };
+
+  const handleResetClick = () => {
+    onReset?.();    // ← aquí se elimina el grafo
+  };
 
   return (
-    <div>
-      <h2>Panel de Control</h2>
+    <div className="control-panel">
+      <h2 className="control-panel__title">
+        Panel de control
+      </h2>
 
-      <div>
-        <label>Número de colores (k): </label>
-        <input
-          type="number"
-          min="3"
-          value={kColors}
-          onChange={(e) => setKColors(Number(e.target.value))}
-        />
+      {/* Contador de nodos */}
+      <div className="control-panel__stats">
+        <div className="control-panel__stats-main">
+          <span className="control-panel__stats-label">
+            Nodos
+          </span>
+          <span className="control-panel__stats-value">
+            {currentNodes} / {maxNodes}
+          </span>
+        </div>
       </div>
 
-      <div style={{ marginTop: "15px" }}>
-        <h3>Algoritmo</h3>
-
-        <select
-          value={algorithm}
-          onChange={(e) => setAlgorithm(e.target.value)}
+      {/* Construcción manual */}
+      <section className="control-panel__section">
+        <h3 className="control-panel__section-title">
+          Construcción manual
+        </h3>
+        <p className="control-panel__section-text">
+          Puede añadir nodos y conectarlos con aristas para formar un grafo.
+        </p>
+        <button
+          className="control-panel__button control-panel__button--primary"
+          onClick={handleAddNodeClick}
         >
-          <option value="lasvegas">Las Vegas</option>
-          <option value="montecarlo">Monte Carlo</option>
-        </select>
-      </div>
+          Añadir Nodo
+        </button>
+      </section>
 
-      <button
-        style={{ marginTop: "20px", padding: "10px", width: "100%" }}
-        onClick={() => GraphController.addNode()}
-      >
-        Crear nodo
-      </button>
+      {/* Grafo aleatorio */}
+      <section className="control-panel__section control-panel__section--bordered">
+        <h3 className="control-panel__section-title control-panel__section-title--green">
+          Grafo aleatorio conectado
+        </h3>
 
-      <button
-        style={{ marginTop: "10px", padding: "10px", width: "100%" }}
-        onClick={() => GraphController.colorGraph(algorithm, kColors)}
-      >
-        Colorear Grafo
-      </button>
+        <label className="control-panel__field">
+          <span className="control-panel__field-label">
+            Cantidad de nodos
+          </span>
+          <input
+            type="number"
+            min={1}
+            max={maxNodes}
+            value={randomNodes}
+            onChange={(e) => setRandomNodes(e.target.value)}
+            className="control-panel__input"
+          />
+        </label>
+
+        <button
+          className="control-panel__button control-panel__button--success"
+          onClick={handleGenerateClick}
+        >
+          Generar grafo aleatorio
+        </button>
+      </section>
+
+      {/* Reset */}
+      <section className="control-panel__section control-panel__section--bordered">
+        <h3 className="control-panel__section-title control-panel__section-title--danger">
+          Reiniciar
+        </h3>
+        <button
+          className="control-panel__button control-panel__button--danger"
+          onClick={handleResetClick}
+        >
+          Reiniciar grafo
+        </button>
+      </section>
     </div>
   );
 }
