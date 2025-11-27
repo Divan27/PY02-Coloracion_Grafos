@@ -1,14 +1,30 @@
 // src/views/GraphCanvasView.jsx
 import React, { useState, useRef } from "react";
 
+const COLOR_MAP = {
+  blue: "#38bdf8",
+  red: "#ef4444",
+  green: "#22c55e",
+};
+
 export default function GraphCanvasView({
   graph,
   onConnectNodes,
-  onMoveNode
+  onMoveNode,
+  onDeleteEdge,
 }) {
   const [selectedNodeId, setSelectedNodeId] = useState(null);
   const [draggingNodeId, setDraggingNodeId] = useState(null);
   const svgRef = useRef(null);
+
+  // Construir set de aristas en conflicto
+  const conflictSet = new Set();
+  (graph.conflictEdges || []).forEach((e) => {
+    const key1 = `${e.sourceId}-${e.targetId}`;
+    const key2 = `${e.targetId}-${e.sourceId}`;
+    conflictSet.add(key1);
+    conflictSet.add(key2);
+  });
 
   const svgPointFromEvent = (evt) => {
     const svg = svgRef.current;
@@ -32,7 +48,6 @@ export default function GraphCanvasView({
   const handleNodeClick = (evt, nodeId) => {
     evt.stopPropagation();
 
-    // Conectar nodos con clics consecutivos
     if (selectedNodeId === null) {
       setSelectedNodeId(nodeId);
     } else if (selectedNodeId === nodeId) {
@@ -66,6 +81,11 @@ export default function GraphCanvasView({
     setSelectedNodeId(null);
   };
 
+  const handleEdgeClick = (evt, edge) => {
+    evt.stopPropagation();
+    onDeleteEdge?.(edge.sourceId, edge.targetId);
+  };
+
   return (
     <div className="graph-canvas">
       <div className="graph-canvas__stars graph-canvas__stars--layer1" />
@@ -80,11 +100,14 @@ export default function GraphCanvasView({
         onMouseUp={handleSvgMouseUp}
         onMouseLeave={handleSvgMouseLeave}
       >
-        {/* Aristas */}
+        {/* Aristas (rojas si conflicto) */}
         {graph.edges.map((edge, idx) => {
           const source = graph.nodes.find((n) => n.id === edge.sourceId);
           const target = graph.nodes.find((n) => n.id === edge.targetId);
           if (!source || !target) return null;
+
+          const key = `${edge.sourceId}-${edge.targetId}`;
+          const isConflict = conflictSet.has(key);
 
           return (
             <line
@@ -93,38 +116,52 @@ export default function GraphCanvasView({
               y1={source.y * 100}
               x2={target.x * 100}
               y2={target.y * 100}
-              stroke="rgba(148, 163, 184, 0.7)"
-              strokeWidth="0.4"
+              stroke={
+                isConflict
+                  ? "rgba(248, 113, 113, 0.95)" // rojo intenso
+                  : "rgba(148, 163, 184, 0.8)"
+              }
+              strokeWidth={isConflict ? 0.5 : 0.25}
+              onClick={(evt) => handleEdgeClick(evt, edge)}
             />
           );
         })}
 
-        {/* Nodos */}
-        {graph.nodes.map((node) => (
-          <g
-            key={node.id}
-            onClick={(evt) => handleNodeClick(evt, node.id)}
-            onMouseDown={(evt) => handleNodeMouseDown(evt, node.id)}
-          >
-            <circle
-              cx={node.x * 100}
-              cy={node.y * 100}
-              r={selectedNodeId === node.id ? 2.3 : 1.9}
-              fill={selectedNodeId === node.id ? "#38bdf8" : "#e5e7eb"}
-              stroke="#020617"
-              strokeWidth="0.3"
-            />
-            <text
-              x={node.x * 100}
-              y={node.y * 100 - 2.8}
-              fontSize="2.2"
-              textAnchor="middle"
-              fill="#e5e7eb"
+        {/* Nodos coloreados */}
+        {graph.nodes.map((node) => {
+          const baseColor = node.color
+            ? COLOR_MAP[node.color] || "#e5e7eb"
+            : "#e5e7eb";
+
+          const fillColor =
+            selectedNodeId === node.id ? "#facc15" : baseColor;
+
+          return (
+            <g
+              key={node.id}
+              onClick={(evt) => handleNodeClick(evt, node.id)}
+              onMouseDown={(evt) => handleNodeMouseDown(evt, node.id)}
             >
-              {node.id}
-            </text>
-          </g>
-        ))}
+              <circle
+                cx={node.x * 100}
+                cy={node.y * 100}
+                r={selectedNodeId === node.id ? 1.8 : 1.4}
+                fill={fillColor}
+                stroke="#020617"
+                strokeWidth="0.25"
+              />
+              <text
+                x={node.x * 100}
+                y={node.y * 100 - 2.4}
+                fontSize="1.8"
+                textAnchor="middle"
+                fill="#e5e7eb"
+              >
+                {node.id}
+              </text>
+            </g>
+          );
+        })}
       </svg>
     </div>
   );
