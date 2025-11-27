@@ -2,6 +2,10 @@
 import Node from "./Node";
 import Edge from "./Edge";
 
+// Nuevos límites
+const MAX_NODES = 150;
+const MIN_RANDOM_NODES = 60;
+
 export default class Graph {
   constructor() {
     /** @type {Node[]} */
@@ -11,8 +15,8 @@ export default class Graph {
   }
 
   addNode(x, y, data = {}) {
-    if (this.nodes.length >= 120) {
-      throw new Error("Se alcanzó el máximo de 120 nodos permitidos.");
+    if (this.nodes.length >= MAX_NODES) {
+      throw new Error(`Se alcanzó el máximo de ${MAX_NODES} nodos permitidos.`);
     }
 
     const nextId =
@@ -28,6 +32,7 @@ export default class Graph {
   addEdge(sourceId, targetId, weight = 1) {
     if (sourceId === targetId) return null;
 
+    // Evitar aristas duplicadas (no dirigido)
     const exists = this.edges.some(
       (e) =>
         (e.sourceId === sourceId && e.targetId === targetId) ||
@@ -45,7 +50,6 @@ export default class Graph {
     this.edges = [];
   }
 
-  // ✅ nuevo: actualizar posición de un nodo
   updateNodePosition(nodeId, x, y) {
     const node = this.nodes.find((n) => n.id === nodeId);
     if (!node) return;
@@ -53,24 +57,41 @@ export default class Graph {
     node.y = y;
   }
 
-  static createRandomConnectedGraph(numNodes, options = {}) {
-    const maxNodes = options.maxNodes ?? 120;
-    const extraEdges = options.extraEdges ?? Math.floor(numNodes / 2);
+  // 👇 Nuevo: eliminar arista entre dos nodos (no dirigida)
+  removeEdgeBetween(sourceId, targetId) {
+    this.edges = this.edges.filter(
+      (e) =>
+        !(
+          (e.sourceId === sourceId && e.targetId === targetId) ||
+          (e.sourceId === targetId && e.targetId === sourceId)
+        )
+    );
+  }
 
-    if (numNodes < 1 || numNodes > maxNodes) {
+  /**
+   * Crea un grafo aleatorio conectado.
+   * @param {number} numNodes
+   */
+  static createRandomConnectedGraph(numNodes, options = {}) {
+    const maxNodes = MAX_NODES;
+    const minNodes = MIN_RANDOM_NODES;
+
+    if (numNodes < minNodes || numNodes > maxNodes) {
       throw new Error(
-        `El número de nodos debe estar entre 1 y ${maxNodes}.`
+        `El número de nodos para el grafo aleatorio debe estar entre ${minNodes} y ${maxNodes}.`
       );
     }
 
     const graph = new Graph();
 
+    // 1) Crear nodos con posiciones aleatorias normalizadas (0-1)
     for (let i = 0; i < numNodes; i++) {
       const x = Math.random();
       const y = Math.random();
       graph.addNode(x, y);
     }
 
+    // 2) Crear un "árbol generador" aleatorio para garantizar conectividad
     for (let i = 1; i < graph.nodes.length; i++) {
       const current = graph.nodes[i];
       const randomPrev =
@@ -78,6 +99,8 @@ export default class Graph {
       graph.addEdge(current.id, randomPrev.id);
     }
 
+    // 3) Agregar algunas aristas extra aleatorias
+    const extraEdges = Math.floor(numNodes / 2);
     let added = 0;
     let tries = 0;
     while (
