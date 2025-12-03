@@ -1,38 +1,94 @@
-// src/views/ControlPanelView.jsx
 import React, { useState } from "react";
+import { GRAPH_CONSTRAINTS, ITERATION_LIMITS } from "./constants/index.js";
+import { OPACITY, TRANSITIONS } from "./constants/theme.js";
+import { validarOpcionesColoracion, validarSinNodosAislados } from "./utils/validations.js";
+import { formatearNumero } from "./utils/formatters.js";
+import Button from "./components/Button.jsx";
+import RangeSlider from "./components/RangeSlider.jsx";
+import ToggleGroup from "./components/ToggleGroup.jsx";
+import ToggleSwitch from "./components/ToggleSwitch.jsx";
+import ProgressBar from "./components/ProgressBar.jsx";
+import PanelSection from "./components/PanelSection.jsx";
+import Modal from "./components/Modal.jsx";
 
+/**
+ * Construye opciones de coloración basadas en el tipo de algoritmo
+ */
+function construirOpcionesColoracion(usarMonteCarlo, cantidadColores, iteraciones) {
+  return {
+    numColors: cantidadColores,
+    algorithm: usarMonteCarlo ? "montecarlo-dynamic" : "lasvegas-dynamic",
+    iterations: usarMonteCarlo ? Number(iteraciones) : undefined
+  };
+}
+
+/**
+ * Determina configuración del botón principal basado en el estado actual
+ */
+function obtenerConfiguracionBotonPrincipal(esDinamico, estaEjecutando, tieneCambiosManuales, tieneGrafoColoreado) {
+  if (esDinamico && estaEjecutando) {
+    return { variant: 'danger', label: 'Detener', action: 'stop' };
+  }
+
+  if (tieneCambiosManuales && tieneGrafoColoreado && !estaEjecutando) {
+    return { variant: 'warning', label: 'Búsqueda Local', action: 'localSearch' };
+  }
+
+  return { variant: 'primary', label: 'Colorear grafo', action: 'color' };
+}
+
+/**
+ * Componente de vista de panel de control para operaciones de grafo y algoritmos
+ * @component
+ * @param {Object} props
+ * @param {number} props.maxNodes - Número máximo de nodos permitidos
+ * @param {number} props.currentNodes - Número actual de nodos en el grafo
+ * @param {Array} props.nodes - Array de objetos nodo en el grafo
+ * @param {Array} props.edges - Array de objetos arista en el grafo
+ * @param {Function} props.onGenerateRandomGraph - Callback para generar grafo aleatorio
+ * @param {Function} props.onReset - Callback to reset the graph
+ * @param {Function} props.onClearColors - Callback to clear colors
+ * @param {Function} props.onReorganize - Callback to reorganize nodes
+ * @param {Function} props.onColorGraph - Callback to start coloring
+ * @param {Object} props.coloringStats - Statistics from coloring algorithm
+ * @param {Function} props.onLocalSearch - Callback for local search
+ * @param {boolean} props.hasManualChanges - If user made manual changes
+ * @param {boolean} props.hasColoredGraph - If graph has been colored
+ * @param {number} props.conflictsCount - Number of conflicts in current coloring
+ */
 export default function ControlPanelView({
   maxNodes,
   currentNodes,
-  onAddNode,
+  nodes,
+  edges,
   onGenerateRandomGraph,
   onReset,
+  onClearColors,
+  onReorganize,
   onColorGraph,
   coloringStats,
-  onPauseDynamic,
-  onResumeDynamic,
+  onLocalSearch,
+  hasManualChanges,
+  hasColoredGraph,
+  conflictsCount,
 }) {
-  const [randomNodes, setRandomNodes] = useState(60);
+  const [nodosAleatorios, setNodosAleatorios] = useState(GRAPH_CONSTRAINTS.MIN_RANDOM_NODES);
 
   // Opciones de coloración
-  const [algorithm, setAlgorithm] = useState("lasvegas"); // "lasvegas" | "montecarlo"
-  const [iterations, setIterations] = useState(1000);     // solo Monte Carlo
-  const [speed, setSpeed] = useState("fast");             // "fast" | "slow"
+  const [usarMonteCarlo, setUsarMonteCarlo] = useState(false); // false = Las Vegas, true = Monte Carlo
+  const [iteraciones, setIteraciones] = useState(ITERATION_LIMITS.MIN_ITERATIONS);
+  const [numeroColores, setNumeroColores] = useState(GRAPH_CONSTRAINTS.MIN_COLORS);
+  const [incrementoAutomaticoColores, setIncrementoAutomaticoColores] = useState(true); // Incremento automático de colores
 
-  const handleAddNodeClick = () => {
-    if (currentNodes >= maxNodes) {
-      window.alert(`No se pueden agregar más de ${maxNodes} nodos.`);
-      return;
-    }
-    onAddNode?.();
-  };
+  // Modal state para advertencias
+  const [estadoModal, setEstadoModal] = useState({ isOpen: false, message: '' });
 
   const handleGenerateClick = () => {
-    let n = Number(randomNodes);
-    if (Number.isNaN(n)) return;
-    if (n < 1) n = 1;
-    if (n > maxNodes) n = maxNodes;
-    onGenerateRandomGraph?.(n);
+    let cantidadNodos = Number(nodosAleatorios);
+    if (Number.isNaN(cantidadNodos)) return;
+    if (cantidadNodos < 1) cantidadNodos = 1;
+    if (cantidadNodos > maxNodes) cantidadNodos = maxNodes;
+    onGenerateRandomGraph?.(cantidadNodos);
   };
 
   const handleResetClick = () => {
@@ -40,32 +96,55 @@ export default function ControlPanelView({
   };
 
   const handleColorClick = () => {
-    if (algorithm === "lasvegas") {
-      // Las Vegas = modo solución válida, sin elegir iteraciones
-      onColorGraph?.({
-        algorithm: "lasvegas-dynamic",
-        speed,
-      });
-    } else {
-      // Monte Carlo = iteraciones limitadas, usuario elige iteraciones
-      const it = Number(iterations);
-      if (Number.isNaN(it) || it < 1) {
-        window.alert("Las iteraciones deben ser un número entero positivo.");
-        return;
-      }
-      onColorGraph?.({
-        algorithm: "montecarlo-dynamic",
-        iterations: it,
-        speed,
-      });
+    // Validar nodos aislados
+    const validacionNodosAislados = validarSinNodosAislados(nodes, edges);
+    if (!validacionNodosAislados.valid) {
+      setEstadoModal({ isOpen: true, message: validacionNodosAislados.error });
+      return;
     }
+
+    const cantidadColores = Number(numeroColores);
+    const opciones = construirOpcionesColoracion(usarMonteCarlo, cantidadColores, iteraciones);
+
+    // Validar opciones de coloración
+    const validacion = validarOpcionesColoracion(opciones);
+    if (!validacion.valid) {
+      setEstadoModal({ isOpen: true, message: validacion.errors.join("\n") });
+      return;
+    }
+
+    // Iniciar coloración con opciones validadas
+    onColorGraph?.({
+      algorithm: opciones.algorithm,
+      speed: "fast",
+      numColors: cantidadColores,
+      autoIncrementColors: incrementoAutomaticoColores, // Pasar opción de incremento automático
+      ...(usarMonteCarlo && { iterations: opciones.iterations })
+    });
   };
 
-  // Estado dinámico para cualquier algoritmo probabilístico
-  const isDynamic = coloringStats && coloringStats.dynamic;
-  const progress = isDynamic ? coloringStats.progress || 0 : 0;
-  const isRunning = isDynamic && coloringStats.isRunning;
-  const isPaused = isDynamic && coloringStats.isPaused;
+  const handleLocalSearchClick = () => {
+    // Validar nodos aislados
+    const validacionNodosAislados = validarSinNodosAislados(nodes, edges);
+    if (!validacionNodosAislados.valid) {
+      setEstadoModal({ isOpen: true, message: validacionNodosAislados.error });
+      return;
+    }
+
+    // Ejecutar búsqueda local
+    onLocalSearch?.();
+  };
+
+  // Estado de algoritmo dinámico
+  const esDinamico = coloringStats && coloringStats.dynamic;
+  const esBusquedaLocal = coloringStats?.algorithm === 'Búsqueda Local';
+  const progreso = esDinamico ? coloringStats.progress || 0 : 0;
+  const estaEjecutando = esDinamico && coloringStats.isRunning;
+
+  // Configuración del botón principal
+  const configuracionBoton = obtenerConfiguracionBotonPrincipal(esDinamico, estaEjecutando, hasManualChanges, hasColoredGraph);
+  const deberMostrarBarraProgreso = esDinamico && !esBusquedaLocal;
+  const deberDeshabilitarBotonPrincipal = currentNodes === 0 || (hasManualChanges && hasColoredGraph && !estaEjecutando && conflictsCount === 0);
 
   return (
     <div className="control-panel">
@@ -82,187 +161,142 @@ export default function ControlPanelView({
         </div>
       </div>
 
-      {/* Construcción manual */}
-      <section className="control-panel__section">
-        <h3 className="control-panel__section-title">Construcción manual</h3>
-        <p className="control-panel__section-text">
-          Añade nodos manualmente y conéctalos entre sí.
-        </p>
-
-        <button
-          className="control-panel__button control-panel__button--primary"
-          onClick={handleAddNodeClick}
-        >
-          Añadir nodo
-        </button>
-      </section>
-
       {/* Grafo aleatorio */}
-      <section className="control-panel__section control-panel__section--bordered">
-        <h3 className="control-panel__section-title control-panel__section-title--green">
-          Grafo aleatorio
-        </h3>
+      <PanelSection title="Grafo aleatorio" titleVariant="green">
+        <RangeSlider
+          label="Cantidad de nodos"
+          value={nodosAleatorios}
+          min={GRAPH_CONSTRAINTS.MIN_RANDOM_NODES}
+          max={maxNodes}
+          step={1}
+          onChange={setNodosAleatorios}
+          disabled={esDinamico && estaEjecutando}
+        />
 
-        <div className="control-panel__field">
-          <label className="control-panel__field-label">
-            Cantidad de nodos
-          </label>
-          <input
-            type="number"
-            min={1}
-            max={maxNodes}
-            value={randomNodes}
-            onChange={(e) => setRandomNodes(e.target.value)}
-            className="control-panel__input"
-          />
-        </div>
-
-        <button
-          className="control-panel__button control-panel__button--success"
+        <Button
+          variant="success"
           onClick={handleGenerateClick}
+          disabled={esDinamico && estaEjecutando}
         >
           Generar grafo aleatorio
-        </button>
-      </section>
+        </Button>
+      </PanelSection>
 
       {/* Coloración de grafos */}
-      <section className="control-panel__section control-panel__section--bordered">
-        <h3 className="control-panel__section-title">Coloración</h3>
+      <PanelSection title="Coloración">
+        {/* Número de colores */}
+        <RangeSlider
+          label="Número de colores"
+          value={numeroColores}
+          min={GRAPH_CONSTRAINTS.MIN_COLORS}
+          max={GRAPH_CONSTRAINTS.MAX_COLORS}
+          step={1}
+          onChange={setNumeroColores}
+          disabled={esDinamico && estaEjecutando}
+        />
 
         {/* Tipo de algoritmo */}
         <div className="control-panel__field">
           <label className="control-panel__field-label">Algoritmo</label>
-          <select
-            className="control-panel__input"
-            value={algorithm}
-            onChange={(e) => setAlgorithm(e.target.value)}
-          >
-            <option value="lasvegas">Las Vegas (solución válida)</option>
-            <option value="montecarlo">Monte Carlo (iteraciones)</option>
-          </select>
+          <ToggleGroup
+            options={[
+              { value: false, label: 'Las Vegas' },
+              { value: true, label: 'Monte Carlo' }
+            ]}
+            value={usarMonteCarlo}
+            onChange={setUsarMonteCarlo}
+            disabled={esDinamico && estaEjecutando}
+          />
+          <p className="control-panel__field-hint">
+            {usarMonteCarlo ? 'Iteraciones limitadas' : 'Busca solución válida'}
+          </p>
         </div>
 
         {/* Iteraciones solo para Monte Carlo */}
-        {algorithm === "montecarlo" && (
-          <div className="control-panel__field">
-            <label className="control-panel__field-label">
-              Iteraciones
-            </label>
-            <input
-              type="number"
-              min={1}
-              value={iterations}
-              onChange={(e) => setIterations(e.target.value)}
-              className="control-panel__input"
-            />
-          </div>
-        )}
+        <RangeSlider
+          label="Iteraciones"
+          value={iteraciones}
+          min={ITERATION_LIMITS.MIN_ITERATIONS}
+          max={ITERATION_LIMITS.MAX_ITERATIONS}
+          step={ITERATION_LIMITS.STEP_ITERATIONS}
+          onChange={setIteraciones}
+          disabled={esDinamico && estaEjecutando}
+          formatValue={formatearNumero}
+          className=""
+          style={{
+            opacity: usarMonteCarlo ? OPACITY.FULL : OPACITY.DISABLED,
+            pointerEvents: usarMonteCarlo ? 'auto' : 'none',
+            transition: TRANSITIONS.FAST
+          }}
+        />
 
-        {/* Velocidad (aplica a ambos algoritmos) */}
-        <div className="control-panel__field">
-          <label className="control-panel__field-label">
-            Velocidad
-          </label>
-          <select
-            className="control-panel__input"
-            value={speed}
-            onChange={(e) => setSpeed(e.target.value)}
-          >
-            <option value="fast">Rápida</option>
-            <option value="slow">Lenta</option>
-          </select>
+        {/* Opción de incremento automático de colores - Solo para Monte Carlo */}
+        <div
+          className="control-panel__field"
+          style={{
+            opacity: usarMonteCarlo ? OPACITY.FULL : OPACITY.DISABLED,
+            pointerEvents: usarMonteCarlo ? 'auto' : 'none',
+            transition: TRANSITIONS.FAST
+          }}
+        >
+          <ToggleSwitch
+            checked={incrementoAutomaticoColores}
+            onChange={setIncrementoAutomaticoColores}
+            disabled={!usarMonteCarlo || (esDinamico && estaEjecutando)}
+            label="Extensión automática de colores"
+          />
         </div>
 
-        {/* Botones de ejecución */}
-        <div className="control-panel__buttons-row">
-          <button
-            className="control-panel__button control-panel__button--primary"
-            onClick={handleColorClick}
-          >
-            Colorear grafo
-          </button>
+        <Button
+          variant={configuracionBoton.variant}
+          onClick={
+            configuracionBoton.action === 'stop' ? onClearColors :
+              configuracionBoton.action === 'localSearch' ? handleLocalSearchClick :
+                handleColorClick
+          }
+          disabled={deberDeshabilitarBotonPrincipal}
+        >
+          {configuracionBoton.label}
+        </Button>
 
-          <button
-            className="control-panel__button control-panel__button--secondary"
-            onClick={onPauseDynamic}
-            disabled={!isDynamic || !isRunning}
-          >
-            Pausar
-          </button>
+        {/* Progress bar - Only for probabilistic algorithms (Las Vegas, Monte Carlo), NOT for local search */}
+        {deberMostrarBarraProgreso && <ProgressBar progress={progreso} />}
+      </PanelSection>
 
-          <button
-            className="control-panel__button control-panel__button--secondary"
-            onClick={onResumeDynamic}
-            disabled={!isDynamic || !isPaused}
-          >
-            Continuar
-          </button>
-        </div>
-
-        {/* Barra de progreso */}
-        {isDynamic && (
-          <div className="control-panel__progress-wrapper">
-            <div className="control-panel__progress-bar">
-              <div
-                className="control-panel__progress-bar-fill"
-                style={{ width: `${(progress * 100).toFixed(1)}%` }}
-              />
-            </div>
-            <div className="control-panel__progress-label">
-              {(progress * 100).toFixed(1)}%
-            </div>
-          </div>
-        )}
-      </section>
-
-      {/* Estadísticas del algoritmo */}
-      {coloringStats && (
-        <section className="control-panel__section control-panel__section--bordered">
-          <h3 className="control-panel__section-title">Resultados</h3>
-          <p className="control-panel__section-text">
-            <strong>Algoritmo:</strong> {coloringStats.algorithm}
-            <br />
-            {coloringStats.iterations && (
-              <>
-                <strong>Iteraciones / intentos:</strong>{" "}
-                {coloringStats.iterations}
-                <br />
-              </>
-            )}
-            <strong>Intentos realizados:</strong>{" "}
-            {coloringStats.attempts}
-            <br />
-            {typeof coloringStats.meanConflicts === "number" && (
-              <>
-                <strong>Conflictos promedio:</strong>{" "}
-                {coloringStats.meanConflicts.toFixed(2)}
-                <br />
-              </>
-            )}
-            <strong>Conflictos (mejor solución):</strong>{" "}
-            {coloringStats.conflicts}
-            <br />
-            <strong>Tasa de éxito estimada:</strong>{" "}
-            {(coloringStats.successRate * 100).toFixed(1)}%
-            <br />
-            <strong>Tiempo:</strong>{" "}
-            {coloringStats.timeMs?.toFixed(2)} ms
-          </p>
-        </section>
-      )}
+      {/* Reorganizar Layout */}
+      <PanelSection
+        title="Reorganizar"
+      >
+        <Button
+          variant="secondary"
+          onClick={() => onReorganize?.()}
+          disabled={currentNodes === 0 || (esDinamico && estaEjecutando)}
+        >
+          Reorganizar layout
+        </Button>
+      </PanelSection>
 
       {/* Reiniciar */}
-      <section className="control-panel__section control-panel__section--bordered">
-        <h3 className="control-panel__section-title control-panel__section-title--danger">
-          Reiniciar
-        </h3>
-        <button
-          className="control-panel__button control-panel__button--danger"
+      <PanelSection title="Reiniciar" titleVariant="danger">
+        <Button
+          variant="danger"
           onClick={handleResetClick}
+          disabled={esDinamico && estaEjecutando}
         >
           Reiniciar grafo
-        </button>
-      </section>
+        </Button>
+      </PanelSection>
+
+      {/* Modal para advertencias y errores */}
+      <Modal
+        isOpen={estadoModal.isOpen}
+        onClose={() => setEstadoModal({ isOpen: false, message: '' })}
+        title="Advertencia"
+        variant="warning"
+        confirmText="Entendido"
+      >
+        {estadoModal.message}
+      </Modal>
     </div>
   );
 }

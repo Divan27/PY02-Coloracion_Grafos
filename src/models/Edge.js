@@ -1,13 +1,18 @@
-// src/models/Edge.js
+/**
+ * Representa una arista no dirigida que conecta dos nodos en el grafo.
+ * @class
+ */
 export default class Edge {
   /**
-   * @param {number} sourceId - Id del nodo origen
-   * @param {number} targetId - Id del nodo destino
-   * @param {number} weight   - Peso de la arista (opcional)
+   * Crea una nueva arista del grafo.
+   * @param {number} sourceId - Identificador del nodo origen.
+   * @param {number} targetId - Identificador del nodo destino.
    */
-  constructor(sourceId, targetId, weight = 1) {
+  constructor(sourceId, targetId) {
+    /** @type {number} Identificador del nodo origen. */
     this.sourceId = sourceId;
+
+    /** @type {number} Identificador del nodo destino. */
     this.targetId = targetId;
-    this.weight = weight;
   }
 }

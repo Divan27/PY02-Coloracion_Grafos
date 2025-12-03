@@ -1,127 +1,198 @@
-// src/models/Graph.js
 import Node from "./Node";
 import Edge from "./Edge";
+import ForceDirectedLayout from "./ForceDirectedLayout";
+import { GRAPH_CONSTRAINTS, LAYOUT_ITERATIONS } from "./constants/index.js";
 
-// Nuevos límites
-const MAX_NODES = 150;
-const MIN_RANDOM_NODES = 60;
-
+/**
+ * Representa una estructura de datos de grafo.
+ * @class
+ */
 export default class Graph {
+  /**
+   * Crea un nuevo grafo vacío.
+   */
   constructor() {
-    /** @type {Node[]} */
-    this.nodes = [];
-    /** @type {Edge[]} */
-    this.edges = [];
+    /** @type {Array<Node>} Array de nodos del grafo. */
+    this.nodos = [];
+
+    /** @type {Array<Edge>} Array de aristas del grafo. */
+    this.aristas = [];
   }
 
-  addNode(x, y, data = {}) {
-    if (this.nodes.length >= MAX_NODES) {
-      throw new Error(`Se alcanzó el máximo de ${MAX_NODES} nodos permitidos.`);
+  /**
+   * Agrega un nuevo nodo al grafo.
+   * @param {number} x - Coordenada X normalizada (0-1)/(0%-100%).
+   * @param {number} y - Coordenada Y normalizada (0-1)/(0%-100%).
+   * @returns {Node} El nodo recién creado.
+   * @throws {Error} Si se alcanza el límite máximo de nodos.
+   */
+  agregarNodo(x, y) {
+    if (this.nodos.length >= GRAPH_CONSTRAINTS.MAX_NODES) {
+      throw new Error(`Se alcanzó el máximo de ${GRAPH_CONSTRAINTS.MAX_NODES} nodos permitidos.`);
     }
 
-    const nextId =
-      this.nodes.length > 0
-        ? this.nodes[this.nodes.length - 1].id + 1
+    const siguienteIdNodo =
+      this.nodos.length > 0
+        ? this.nodos[this.nodos.length - 1].id + 1
         : 1;
 
-    const node = new Node(nextId, x, y, data);
-    this.nodes.push(node);
-    return node;
+    const nuevoNodo = new Node(siguienteIdNodo, x, y);
+    this.nodos.push(nuevoNodo);
+    return nuevoNodo;
   }
 
-  addEdge(sourceId, targetId, weight = 1) {
+  /**
+   * Agrega una arista entre dos nodos.
+   * @param {number} sourceId - Identificador del nodo origen.
+   * @param {number} targetId - Identificador del nodo destino.
+   * @returns {Edge|null} La arista recién creada, o null si es inválida.
+   */
+  agregarArista(sourceId, targetId) {
     if (sourceId === targetId) return null;
 
-    // Evitar aristas duplicadas (no dirigido)
-    const exists = this.edges.some(
-      (e) =>
-        (e.sourceId === sourceId && e.targetId === targetId) ||
-        (e.sourceId === targetId && e.targetId === sourceId)
+    //evitar duplicados 
+    const aristaExiste = this.aristas.some(
+      (arista) =>
+        (arista.sourceId === sourceId && arista.targetId === targetId) ||
+        (arista.sourceId === targetId && arista.targetId === sourceId)
     );
-    if (exists) return null;
+    if (aristaExiste) return null;
 
-    const edge = new Edge(sourceId, targetId, weight);
-    this.edges.push(edge);
-    return edge;
+    //crear nueva arista
+    const nuevaArista = new Edge(sourceId, targetId);
+    this.aristas.push(nuevaArista);
+    return nuevaArista;
   }
 
-  reset() {
-    this.nodes = [];
-    this.edges = [];
+  /**
+   * Limpia todos los nodos y aristas del grafo.
+   */
+  resetear() {
+    this.nodos = [];
+    this.aristas = [];
   }
 
-  updateNodePosition(nodeId, x, y) {
-    const node = this.nodes.find((n) => n.id === nodeId);
-    if (!node) return;
-    node.x = x;
-    node.y = y;
+  /**
+   * Actualiza la posición de un nodo.
+   * @param {number} nodeId - Identificador del nodo a actualizar.
+   * @param {number} x - Nueva coordenada X normalizada (0-1).
+   * @param {number} y - Nueva coordenada Y normalizada (0-1).
+   */
+  actualizarPosicionNodo(nodeId, x, y) {
+    const nodo = this.nodos.find((n) => n.id === nodeId);
+    if (!nodo) return;
+    nodo.x = x;
+    nodo.y = y;
   }
 
-  // 👇 Nuevo: eliminar arista entre dos nodos (no dirigida)
-  removeEdgeBetween(sourceId, targetId) {
-    this.edges = this.edges.filter(
-      (e) =>
+  /**
+   * Remueve una arista.
+   * @param {number} sourceId - Identificador del primer nodo.
+   * @param {number} targetId - Identificador del segundo nodo.
+   */
+  eliminarArista(sourceId, targetId) {
+    this.aristas = this.aristas.filter(
+      (arista) =>
         !(
-          (e.sourceId === sourceId && e.targetId === targetId) ||
-          (e.sourceId === targetId && e.targetId === sourceId)
+          (arista.sourceId === sourceId && arista.targetId === targetId) ||
+          (arista.sourceId === targetId && arista.targetId === sourceId)
         )
     );
   }
 
   /**
-   * Crea un grafo aleatorio conectado.
-   * @param {number} numNodes
+   * Remueve un nodo y todas sus aristas conectadas del grafo.
+   * @param {number} nodeId - Identificador del nodo a eliminar.
    */
-  static createRandomConnectedGraph(numNodes, options = {}) {
-    const maxNodes = MAX_NODES;
-    const minNodes = MIN_RANDOM_NODES;
+  eliminarNodo(nodeId) {
+    // Remover el nodo
+    this.nodos = this.nodos.filter((nodo) => nodo.id !== nodeId);
 
-    if (numNodes < minNodes || numNodes > maxNodes) {
+    // Remover todas las aristas conectadas a este nodo
+    this.aristas = this.aristas.filter(
+      (arista) => arista.sourceId !== nodeId && arista.targetId !== nodeId
+    );
+  }
+
+  /**
+   * Crea un grafo conectado aleatorio con el número especificado de nodos.
+   * Usa posicionamiento basado en grilla con variación aleatoria y layout dirigido por fuerzas.
+   * @param {number} numeroDeNodos - Número de nodos a generar.
+   * @returns {Graph} Un nuevo grafo aleatorio conectado.
+   * @throws {Error} Si numeroDeNodos está fuera del rango válido.
+   * @static
+   */
+  static crearGrafoConectadoAleatorio(numeroDeNodos) {
+    if (
+      numeroDeNodos < GRAPH_CONSTRAINTS.MIN_RANDOM_NODES ||
+      numeroDeNodos > GRAPH_CONSTRAINTS.MAX_NODES
+    ) {
       throw new Error(
-        `El número de nodos para el grafo aleatorio debe estar entre ${minNodes} y ${maxNodes}.`
+        `El número de nodos debe estar entre ${GRAPH_CONSTRAINTS.MIN_RANDOM_NODES} y ${GRAPH_CONSTRAINTS.MAX_NODES}.`
       );
     }
 
-    const graph = new Graph();
+    const grafo = new Graph();
 
-    // 1) Crear nodos con posiciones aleatorias normalizadas (0-1)
-    for (let i = 0; i < numNodes; i++) {
-      const x = Math.random();
-      const y = Math.random();
-      graph.addNode(x, y);
+    // Distribuir nodos en grilla con variación aleatoria
+    const columnas = Math.ceil(Math.sqrt(numeroDeNodos));
+    const filas = Math.ceil(numeroDeNodos / columnas);
+
+    const generarCoordenada = (col, fila, maxCol, maxFila) => {
+      const xNorm = (col + 0.5 + (Math.random() - 0.5) * 0.8) / maxCol;
+      const yNorm = (fila + 0.5 + (Math.random() - 0.5) * 0.8) / maxFila;
+      return {
+        x: 0.05 + xNorm * 0.9,
+        y: 0.05 + yNorm * 0.9
+      };
+    };
+
+    for (let i = 0; i < numeroDeNodos; i++) {
+      const col = i % columnas;
+      const fila = Math.floor(i / columnas);
+      const { x, y } = generarCoordenada(col, fila, columnas, filas);
+      grafo.agregarNodo(x, y);
     }
 
-    // 2) Crear un "árbol generador" aleatorio para garantizar conectividad
-    for (let i = 1; i < graph.nodes.length; i++) {
-      const current = graph.nodes[i];
-      const randomPrev =
-        graph.nodes[Math.floor(Math.random() * i)];
-      graph.addEdge(current.id, randomPrev.id);
+    // Crear árbol de expansión para conectar los nodos
+    for (let i = 1; i < grafo.nodos.length; i++) {
+      const nodoPrevio = grafo.nodos[Math.floor(Math.random() * i)];
+      grafo.agregarArista(grafo.nodos[i].id, nodoPrevio.id);
     }
 
-    // 3) Agregar algunas aristas extra aleatorias
-    const extraEdges = Math.floor(numNodes / 2);
-    let added = 0;
-    let tries = 0;
-    while (
-      added < extraEdges &&
-      tries < numNodes * numNodes
-    ) {
-      const n1 =
-        graph.nodes[Math.floor(Math.random() * graph.nodes.length)];
-      const n2 =
-        graph.nodes[Math.floor(Math.random() * graph.nodes.length)];
+    // Agregar aristas extra aleatorias
+    const extras = Math.floor(numeroDeNodos / 4);
+    let agregadas = 0, intentos = 0, maxIntentos = numeroDeNodos * numeroDeNodos;
 
-      if (n1.id !== n2.id) {
-        const before = graph.edges.length;
-        graph.addEdge(n1.id, n2.id);
-        if (graph.edges.length > before) {
-          added++;
-        }
+    while (agregadas < extras && intentos++ < maxIntentos) {
+      const a = grafo.nodos[Math.floor(Math.random() * grafo.nodos.length)];
+      const b = grafo.nodos[Math.floor(Math.random() * grafo.nodos.length)];
+      if (a.id !== b.id && grafo.agregarArista(a.id, b.id)) {
+        agregadas++;
       }
-      tries++;
     }
 
-    return graph;
+    // Selección de iteraciones de layout
+    const iteracionesLayout = numeroDeNodos < LAYOUT_ITERATIONS.SMALL_GRAPH_THRESHOLD
+      ? LAYOUT_ITERATIONS.SMALL_GRAPH
+      : numeroDeNodos < LAYOUT_ITERATIONS.MEDIUM_GRAPH_THRESHOLD
+        ? LAYOUT_ITERATIONS.MEDIUM_GRAPH
+        : LAYOUT_ITERATIONS.LARGE_GRAPH;
+
+    grafo.aplicarLayoutFuerzas(iteracionesLayout);
+
+    return grafo;
   }
+
+
+  /**
+   * Aplica el algoritmo de layout dirigido por fuerzas para posicionar nodos.
+   * Usa el algoritmo de Fruchterman-Reingold para distribución natural de nodos.
+   * @param {number} [iteraciones=600] - Número de iteraciones de la simulación.
+   */
+  aplicarLayoutFuerzas(iteraciones = 600) {
+    const layout = new ForceDirectedLayout(1.0, 1.0);
+    layout.aplicar(this.nodos, this.aristas, iteraciones);
+  }
+
 }
